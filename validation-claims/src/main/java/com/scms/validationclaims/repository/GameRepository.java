@@ -1,6 +1,6 @@
-package com.scms.validation_claims.repository;
+package com.scms.validationclaims.repository;
 
-import com.scms.validation_claims.model.Game;
+import com.scms.validationclaims.model.Game;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;

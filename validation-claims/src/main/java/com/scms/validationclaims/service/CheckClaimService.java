@@ -1,18 +1,17 @@
-package com.scms.validation_claims.service;
+package com.scms.validationclaims.service;
 
-import com.scms.validation_claims.dto.CheckRequest;
-import com.scms.validation_claims.dto.CheckResponse;
-import com.scms.validation_claims.dto.ClaimRequest;
-import com.scms.validation_claims.dto.ClaimResponse;
-import com.scms.validation_claims.model.ClaimLog;
-import com.scms.validation_claims.model.Game;
-import com.scms.validation_claims.model.Winner;
-import com.scms.validation_claims.repository.ClaimLogRepository;
-import com.scms.validation_claims.repository.GameRepository;
-import com.scms.validation_claims.repository.WinnerRepository;
+import com.scms.validationclaims.dto.CheckRequest;
+import com.scms.validationclaims.dto.CheckResponse;
+import com.scms.validationclaims.dto.ClaimRequest;
+import com.scms.validationclaims.dto.ClaimResponse;
+import com.scms.validationclaims.model.ClaimLog;
+import com.scms.validationclaims.model.Game;
+import com.scms.validationclaims.model.Winner;
+import com.scms.validationclaims.repository.ClaimLogRepository;
+import com.scms.validationclaims.repository.GameRepository;
+import com.scms.validationclaims.repository.WinnerRepository;
 import lombok.RequiredArgsConstructor;
 import org.bouncycastle.jcajce.provider.digest.Blake2b;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,9 +42,16 @@ public class CheckClaimService {
     @Transactional(readOnly = true)
     public CheckResponse check(CheckRequest req) {
         int alg = gameHashAlg(req.getGame_id());
+
+        String customer = zfillDigits(req.getCustomer_id(), 2);
+        String game     = zfillDigits(req.getGame_id(), 3);
+        String batch    = zfillDigits(req.getBatch_id(), 2);
+        String pack     = zfillDigits(req.getPack_id(), 7);
+        String ticket   = zfillDigits(req.getTicket_id(), 3);
+
         String serial = hashing.buildSerial(
-                req.getCustomer_id(), req.getGame_id(), req.getBatch_id(),
-                req.getPack_id(), req.getTicket_id());
+                customer, game, batch,
+                pack, req.getTicket_id());
         String th = hashing.hash(alg, serial);
 
         return winnerRepo.findById(th)
@@ -87,7 +93,16 @@ public class CheckClaimService {
         }
 
         // Append a single audit log row with chained signature
-        String previous = logRepo.findLastSignature().orElse("");
+        String previous = logRepo.findTopByTxCustomerIdAndTxGameIdAndTxBatchIdAndTxPackIdAndTxTicketIdOrderByIdclaimlogDesc(
+                req.getCustomer_id(),
+                req.getGame_id(),
+                req.getBatch_id(),
+                Optional.ofNullable(req.getPack_id()).orElse(""),
+                req.getTicket_id()
+        )
+                .map(ClaimLog::getSignature)
+                .orElse("");
+
 
         ClaimLog log = new ClaimLog();
         log.setTxDate(LocalDate.now());
@@ -109,7 +124,14 @@ public class CheckClaimService {
         return new ClaimResponse(true, updated, th, oldClaim, desired, null);
     }
 
-    /** Build chained BLAKE2b signature over textual payload + previous signature. */
+    private static String zfillDigits(String s, int width) {
+        String v = (s == null ? "" : s).trim();
+        if (!v.matches("\\d*")) throw new IllegalArgumentException("digits only: " + v);
+        if (v.length() > width) throw new IllegalArgumentException("too long: " + v);
+        return "0".repeat(width - v.length()) + v;
+    }
+
+        /** Build chained BLAKE2b signature over textual payload + previous signature. */
     private String chainSignature(String prev, ClaimLog e) {
         String payload = Stream.of(
                 e.getTxDate(),
@@ -132,5 +154,6 @@ public class CheckClaimService {
         StringBuilder sb = new StringBuilder(digest.length * 2);
         for (byte b : digest) sb.append(String.format("%02x", b));
         return sb.toString();
+
     }
 }

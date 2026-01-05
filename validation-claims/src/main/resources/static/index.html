@@ -1,0 +1,125 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Validation & Claims — PoC</title>
+    <style>
+        :root { color-scheme: light dark; }
+        body { font-family: system-ui, sans-serif; margin: 2rem; }
+        h1 { margin-top: 0; }
+        form, pre, section { margin-bottom: 1.25rem; }
+        label { display:block; margin:.25rem 0 .1rem; font-size:.9rem; }
+        input, select { width: 18rem; padding:.4rem; }
+        button { margin-top:.8rem; padding:.5rem .9rem; }
+        .grid { display:flex; gap:2rem; flex-wrap: wrap; }
+        pre { background: #0001; padding: .75rem; overflow: auto; max-height: 32rem; }
+    </style>
+</head>
+<body>
+<h1>Validation & Claims — PoC</h1>
+
+<div class="grid">
+    <!-- Win check -->
+    <section>
+        <h2>Check winner</h2>
+        <form id="winForm">
+            <label>customer_id <input name="customer_id" value="11"></label>
+            <label>game_id     <input name="game_id"     value="101"></label>
+            <label>batch_id    <input name="batch_id"    value="01"></label>
+            <label>ticket_id   <input name="ticket_id"   value="007"></label>
+            <label>pack_id     <input name="pack_id"     value="0000123"></label>
+            <button type="submit">Check</button>
+        </form>
+        <pre id="winOut">{ response appears here }</pre>
+    </section>
+
+    <!-- Claim -->
+    <section>
+        <h2>Update claim status</h2>
+        <form id="claimForm">
+            <label>customer_id         <input name="customer_id" value="11"></label>
+            <label>game_id             <input name="game_id"     value="101"></label>
+            <label>batch_id            <input name="batch_id"    value="01"></label>
+            <label>ticket_id           <input name="ticket_id"   value="007"></label>
+            <label>pack_id             <input name="pack_id"     value="0000123"></label>
+            <label>desired_claim_value <select name="desired_claim_value">
+                <option>1</option><option>2</option></select></label>
+            <label>f1 <input name="f1" value="channel"></label>
+            <label>f2 <input name="f2" value="device"></label>
+            <label>f3 <input name="f3" value="person"></label>
+            <label>f4 <input name="f4" value="external_ref"></label>
+            <button type="submit">Submit</button>
+        </form>
+        <pre id="claimOut">{ response appears here }</pre>
+    </section>
+
+    <!-- H2 data via helper endpoints -->
+    <section>
+        <h2>H2 data browser</h2>
+        <div style="display:flex; gap:1rem; flex-wrap:wrap">
+            <button id="loadGames">Show games</button>
+            <button id="loadWinners">Show winners (first 50)</button>
+            <button id="loadClaimlog">Show claimlog (last 50)</button>
+        </div>
+        <pre id="dataOut">{ data appears here }</pre>
+    </section>
+</div>
+
+<script>
+    async function postJson(url, data) {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      const txt = await res.text();
+      let parsed; try { parsed = JSON.parse(txt); } catch { parsed = txt; }
+      return { ok: res.ok, status: res.status, body: parsed };
+    }
+    async function getJson(url) {
+      const res = await fetch(url);
+      const txt = await res.text();
+      let parsed; try { parsed = JSON.parse(txt); } catch { parsed = txt; }
+      return { ok: res.ok, status: res.status, body: parsed };
+    }
+    const formToObj = (form) => Object.fromEntries(new FormData(form).entries());
+
+    // Win check
+    document.getElementById('winForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const data = formToObj(e.target);
+      const out = document.getElementById('winOut');
+      const resp = await postJson('/api/win/check', data);
+      out.textContent = JSON.stringify(resp.body, null, 2);
+    });
+
+    // Claim
+    document.getElementById('claimForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const data = formToObj(e.target);
+      if ('desired_claim_value' in data) data.desired_claim_value = parseInt(data.desired_claim_value, 10);
+      const out = document.getElementById('claimOut');
+      const resp = await postJson('/api/claim', data);
+      out.textContent = JSON.stringify(resp.body, null, 2);
+    });
+
+    // H2 data via API
+    document.getElementById('loadGames').addEventListener('click', async () => {
+      const out = document.getElementById('dataOut');
+      const resp = await getJson('/ui/games');
+      out.textContent = JSON.stringify(resp.body, null, 2);
+    });
+    document.getElementById('loadWinners').addEventListener('click', async () => {
+      const out = document.getElementById('dataOut');
+      const resp = await getJson('/ui/winners?limit=50');
+      out.textContent = JSON.stringify(resp.body, null, 2);
+    });
+    document.getElementById('loadClaimlog').addEventListener('click', async () => {
+      const out = document.getElementById('dataOut');
+      const resp = await getJson('/ui/claimlog?limit=50');
+      out.textContent = JSON.stringify(resp.body, null, 2);
+    });
+</script>
+</body>
+</html>

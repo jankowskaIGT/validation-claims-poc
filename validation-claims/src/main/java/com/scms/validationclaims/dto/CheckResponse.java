@@ -1,4 +1,4 @@
-package com.scms.validation_claims.dto;
+package com.scms.validationclaims.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;

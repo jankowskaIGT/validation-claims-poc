@@ -50,29 +50,9 @@ spring:
 
 
 ---
-spring:
-  config:
-    activate:
-      on-profile: mysql
-  datasource:
-    url: jdbc:mysql://localhost:3306/customer_11
-    driverClassName: com.mysql.cj.jdbc.Driver
-    username: root
-    password: root
-  jpa:
-    show-sql: true
-    hibernate:
-      ddl-auto: none
-    defer-datasource-initialization: true
-  sql:
-    init:
-      mode: always
-      schema-locations: classpath:schema.sql
-      data-locations:   classpath:data.sql
-
 springdoc:
   api-docs:
-    enabled: false
+    enabled: true
   swagger-ui:
     enabled: true
     disable-swagger-default-url: true

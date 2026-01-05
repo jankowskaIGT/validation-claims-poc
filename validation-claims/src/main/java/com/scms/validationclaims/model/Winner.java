@@ -1,4 +1,4 @@
-package com.scms.validation_claims.model;
+package com.scms.validationclaims.model;
 
 import jakarta.persistence.*;
 import lombok.Data;

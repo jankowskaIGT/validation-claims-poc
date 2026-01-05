@@ -1,4 +1,4 @@
-package com.scms.validation_claims.service;
+package com.scms.validationclaims.service;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

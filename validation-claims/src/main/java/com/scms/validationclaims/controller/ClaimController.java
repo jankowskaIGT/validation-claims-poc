@@ -1,29 +1,26 @@
-package com.scms.validation_claims.controller;
+package com.scms.validationclaims.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 
-import com.scms.validation_claims.dto.ClaimRequest;
-import com.scms.validation_claims.dto.ClaimResponse;
-import com.scms.validation_claims.service.CheckClaimService;
+import com.scms.validationclaims.dto.ClaimRequest;
+import com.scms.validationclaims.dto.ClaimResponse;
+import com.scms.validationclaims.service.CheckClaimService;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 
-@Tag(name = "Claims", description = "Update claim status and append audit log")
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
@@ -125,5 +122,7 @@ public class ClaimController {
     @PostMapping("/claim")
     public ResponseEntity<ClaimResponse> claim(@Valid @RequestBody ClaimRequest req) {
         return ResponseEntity.ok(service.claim(req));
+
+
     }
 }
