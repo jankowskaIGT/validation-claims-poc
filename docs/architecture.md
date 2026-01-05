@@ -13,7 +13,7 @@
 - Databases: MySQL/PostgreSQL with tables `games`, `winners`, `claimlog`
 
 ## Data Model
-- games: idgame, game_id, ticket_price, hash_algoritham
+- games: idgame, game_id, ticket_price, hash_algorithm
 - winners: ticket_hash (PK), game_id, batch_id, tier, claim_status, prize
 - claimlog: idclaimlog, tx_date, tx_time, old/new claim values, foreign refs, signature
 

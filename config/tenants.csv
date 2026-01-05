@@ -1,4 +1,0 @@
-
-customer_ID,customer_Name,customer_Status,customer_Database_connect_string
-11,Big Lottery,1,jdbc:mysql://localhost:3306/customer_11?user=root&password=root
-22,Small Lottery,1,jdbc:postgresql://localhost:5432/customer_22?user=postgres&password=root

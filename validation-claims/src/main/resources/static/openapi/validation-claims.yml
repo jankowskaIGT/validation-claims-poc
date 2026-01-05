@@ -1,0 +1,224 @@
+openapi: 3.0.3
+info:
+  title: SCMS Validation & Claims (Java PoC)
+  version: 0.1.0
+  description: >
+    Proof of Concept microservice for lottery ticket validation (win) and claim processing.
+    Multi-tenancy: `customer_id` selects tenant/database; hashing algorithm per game (`games.hash_algoritham`: 1=BLAKE2b, 2=SHA-256).
+
+servers:
+  - url: http://localhost:8080
+    description: Local development environment
+
+tags:
+  - name: validation
+    description: Ticket validation (win)
+  - name: claim
+    description: Claim processing and audit logging
+
+paths:
+  /api/win/check:
+    post:
+      tags: [validation]
+      summary: Check if a ticket is a winner (read-only)
+      description: |
+        Computes `ticket_hash` based on serial {YY}{GGG}{BB}{PPPPPPP}{TTT},
+        uses hashing algorithm from `games.hash_algorithm` (1=BLAKE2b512, 2=SHA-256),
+        then looks up in `winners` table (PK = ticket_hash).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckRequest'
+            examples:
+              winnerSha256:
+                summary: Winning ticket (SHA-256, tenant 11, game 101)
+                value:
+                  customer_id: "11"
+                  game_id: "101"
+                  batch_id: "01"
+                  ticket_id: "007"
+                  pack_id: "0000123"
+              notWinner:
+                summary: Non-winning los
+                value:
+                  customer_id: "11"
+                  game_id: "101"
+                  batch_id: "01"
+                  ticket_id: "999"
+                  pack_id: "0000001"
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckResponse'
+              examples:
+                found:
+                  summary: Winner
+                  value:
+                    found: true
+                    ticket_hash: "dbedcc2a...bce5"
+                    tier: "4"
+                    prize: 0.00
+                    claim_status: 0
+                    message: null
+                notFound:
+                  summary: Not a winner
+                  value:
+                    found: false
+                    ticket_hash: "f00ba7..."
+                    tier: null
+                    prize: null
+                    claim_status: 0
+                    message: "not winner"
+        '400':
+          description: Validation error (e.g., invalid field length)
+        '500':
+          description: Internal server error
+
+  /api/claim:
+    post:
+      tags: [claim]
+      summary: Update claim status (monotonic 0→1→2) and write audit log
+      description: |
+        Increases `ticket_claim_status` in `winners` (no decrease allowed),
+        then writes one row in `claimlog` with chained signature (BLAKE2b512 = hash(payload + previous signature)).
+        Works only for winning tickets.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaimRequest'
+            examples:
+              increase0to1:
+                summary: Increase from 0 → 1
+                value:
+                  customer_id: "11"
+                  game_id: "101"
+                  batch_id: "01"
+                  ticket_id: "007"
+                  desired_claim_value: 1
+                  pack_id: "0000123"
+                  f1: "channel"
+                  f2: "device"
+                  f3: "person"
+                  f4: "external_ref"
+              increase1to2:
+                summary: Increase from 1 → 2
+                value:
+                  customer_id: "11"
+                  game_id: "101"
+                  batch_id: "01"
+                  ticket_id: "007"
+                  desired_claim_value: 2
+      responses:
+        '200':
+          description: Claim update result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimResponse'
+              examples:
+                updated:
+                  summary: Updated (e.g., 0 → 1)
+                  value:
+                    found: true
+                    updated: true
+                    ticket_hash: "dbedcc2a...bce5"
+                    old_claim_value: 0
+                    new_claim_value: 1
+                    message: null
+                noDecrease:
+                  summary: Attempt to decrease (e.g., 2 → 1) blocked
+                  value:
+                    found: true
+                    updated: false
+                    ticket_hash: "dbedcc2a...bce5"
+                    old_claim_value: 2
+                    new_claim_value: 1
+                    message: "cannot decrease claim status"
+                notWinner:
+                  summary: Non-existent / not winner
+                  value:
+                    found: false
+                    updated: false
+                    ticket_hash: "f00ba7..."
+                    old_claim_value: 0
+                    new_claim_value: 1
+                    message: "non existent – not winner"
+        '400':
+          description: Validation error (e.g., desired_claim_value outside {1,2})
+        '500':
+          description: Internal server error
+
+components:
+  schemas:
+    CheckRequest:
+      type: object
+      required: [customer_id, game_id, batch_id, ticket_id]
+      properties:
+        customer_id:
+          type: string
+          description: Tenant/customer identifier (YY)
+          pattern: '^\d{2}$'
+          example: "11"
+        game_id:
+          type: string
+          description: Game identifier (GGG)
+          pattern: '^\d{3}$'
+          example: "101"
+        batch_id:
+          type: string
+          description: Batch identifier (BB)
+          pattern: '^\d{2}$'
+          example: "01"
+        pack_id:
+          type: string
+          description: Pack identifier (PPPPPPP, optional)
+          pattern: '^\d{0,7}$'
+          example: "0000123"
+        ticket_id:
+          type: string
+          description: Ticket identifier (TTT)
+          pattern: '^\d{3}$'
+          example: "007"
+
+    CheckResponse:
+      type: object
+      properties:
+        found: { type: boolean, example: true }
+        ticket_hash: { type: string, example: "dbedcc2a...bce5" }
+        tier: { type: string, nullable: true, example: "4" }
+        prize: { type: number, format: double, nullable: true, example: 0.00 }
+        claim_status: { type: integer, example: 0 }
+        message: { type: string, nullable: true, example: null }
+
+    ClaimRequest:
+      allOf:
+        - $ref: '#/components/schemas/CheckRequest'
+        - type: object
+          required: [desired_claim_value]
+          properties:
+            desired_claim_value:
+              type: integer
+              description: Target claim status (1 or 2)
+              enum: [1,2]
+              example: 1
+            f1: { type: string, nullable: true, example: "channel" }
+            f2: { type: string, nullable: true, example: "device" }
+            f3: { type: string, nullable: true, example: "person" }
+            f4: { type: string, nullable: true, example: "external_ref" }
+
+    ClaimResponse:
+      type: object
+      properties:
+        found: { type: boolean, example: true }
+        updated: { type: boolean, example: true }
+        ticket_hash: { type: string, example: "dbedcc2a...bce5" }
+        old_claim_value: { type: integer, example: 0 }
+        new_claim_value: { type: integer, example: 1 }
+        message: { type: string, nullable: true, example: null }
