@@ -4,14 +4,23 @@ import com.scms.validationclaims.dto.CheckRequest;
 import com.scms.validationclaims.dto.CheckResponse;
 import com.scms.validationclaims.dto.ClaimRequest;
 import com.scms.validationclaims.dto.ClaimResponse;
+
+import com.scms.validationclaims.exception.BusinessValidationException;
+import com.scms.validationclaims.exception.ClaimDecreaseForbiddenException;
+import com.scms.validationclaims.exception.NotWinnerException;
+
 import com.scms.validationclaims.model.ClaimLog;
 import com.scms.validationclaims.model.Game;
 import com.scms.validationclaims.model.Winner;
+
 import com.scms.validationclaims.repository.ClaimLogRepository;
 import com.scms.validationclaims.repository.GameRepository;
 import com.scms.validationclaims.repository.WinnerRepository;
+
 import lombok.RequiredArgsConstructor;
 import org.bouncycastle.jcajce.provider.digest.Blake2b;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,7 +60,7 @@ public class CheckClaimService {
 
         String serial = hashing.buildSerial(
                 customer, game, batch,
-                pack, req.getTicket_id());
+                pack, ticket);
         String th = hashing.hash(alg, serial);
 
         return winnerRepo.findById(th)
@@ -68,21 +77,41 @@ public class CheckClaimService {
     @Transactional
     public ClaimResponse claim(ClaimRequest req) {
         int alg = gameHashAlg(req.getGame_id());
+
+        String customer = zfillDigits(req.getCustomer_id(), 2);
+        String game     = zfillDigits(req.getGame_id(), 3);
+        String batch    = zfillDigits(req.getBatch_id(), 2);
+        String pack     = zfillDigits(req.getPack_id(), 7);
+        String ticket   = zfillDigits(req.getTicket_id(), 3);
+
         String serial = hashing.buildSerial(
-                req.getCustomer_id(), req.getGame_id(), req.getBatch_id(),
-                req.getPack_id(), req.getTicket_id());
+                customer, game, batch,
+                pack, ticket);
         String th = hashing.hash(alg, serial);
+
 
         Winner w = winnerRepo.findById(th).orElse(null);
         if (w == null) {
-            return new ClaimResponse(false, false, th, 0, 0, "non existent – not winner");
+            // -> 404 Not Found (GlobalExceptionHandler)
+            throw new NotWinnerException(th);
         }
 
         int oldClaim = Optional.ofNullable(w.getTicketClaimStatus()).orElse(0);
-        int desired = Optional.ofNullable(req.getDesired_claim_value()).orElse(oldClaim);
+
+        Integer desiredRaw = req.getDesired_claim_value();
+        int desired = Optional.ofNullable(desiredRaw).orElse(oldClaim);
+
+        if (desiredRaw != null && desired != 1 && desired != 2) {
+            throw new BusinessValidationException(
+                    "CLAIM_VALUE_INVALID",
+                    "desired_claim_value must be 1 or 2",
+                    java.util.Map.of("requested", desiredRaw)
+            );
+        }
+
 
         if (desired < oldClaim) {
-            return new ClaimResponse(true, false, th, oldClaim, oldClaim, "cannot decrease claim status");
+            throw new ClaimDecreaseForbiddenException(oldClaim, desired, th);
         }
 
         // If desired equals current, treat as idempotent no-op (no state change).
@@ -93,15 +122,18 @@ public class CheckClaimService {
         }
 
         // Append a single audit log row with chained signature
-        String previous = logRepo.findTopByTxCustomerIdAndTxGameIdAndTxBatchIdAndTxPackIdAndTxTicketIdOrderByIdclaimlogDesc(
+        String previous = String.valueOf(logRepo.findLatestByTicket(
                 req.getCustomer_id(),
                 req.getGame_id(),
                 req.getBatch_id(),
                 Optional.ofNullable(req.getPack_id()).orElse(""),
-                req.getTicket_id()
+                req.getTicket_id(),
+                PageRequest.of(0, 1)  // take exactly the first record
         )
-                .map(ClaimLog::getSignature)
-                .orElse("");
+
+        .stream()
+        .findFirst()
+        .orElse(null));
 
 
         ClaimLog log = new ClaimLog();
