@@ -91,7 +91,6 @@ public class ClaimController {
                             }
                     )
             ),
-            // Błędy obsługiwane przez GlobalExceptionHandler:
             @ApiResponse(
                     responseCode = "404",
                     description = "Not winner",

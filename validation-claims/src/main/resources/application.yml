@@ -54,6 +54,9 @@ springdoc:
   api-docs:
     enabled: true
   swagger-ui:
+    doc-expansion: none
+    defaultModelExpandDepth: 0
+    defaultModelsExpandDepth: -1
     enabled: true
     disable-swagger-default-url: true
     url: /openapi/validation-claims.yml

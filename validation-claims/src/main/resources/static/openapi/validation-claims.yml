@@ -1,10 +1,9 @@
 openapi: 3.0.3
 info:
   title: SCMS Validation & Claims (Java PoC)
-  version: 0.1.0
   description: >
     Proof of Concept microservice for lottery ticket validation (win) and claim processing.
-    Multi-tenancy: `customer_id` selects tenant/database; hashing algorithm per game (`games.hash_algoritham`: 1=BLAKE2b, 2=SHA-256).
+    Multi-tenancy: `customer_id` selects tenant/database; hashing algorithm per game (`games.hash_algorithm`: 1=BLAKE2b, 2=SHA-256).
 
 servers:
   - url: http://localhost:8080
@@ -33,21 +32,21 @@ paths:
               $ref: '#/components/schemas/CheckRequest'
             examples:
               winnerSha256:
-                summary: Winning ticket (SHA-256, tenant 11, game 101)
+                summary: Winning ticket
+                value:
+                  customer_id: "22"
+                  game_id: "202"
+                  batch_id: "01"
+                  ticket_id: "000"
+                  pack_id: "0000000"
+              notWinner:
+                summary: Non-winning ticket
                 value:
                   customer_id: "11"
                   game_id: "101"
                   batch_id: "01"
                   ticket_id: "007"
                   pack_id: "0000123"
-              notWinner:
-                summary: Non-winning los
-                value:
-                  customer_id: "11"
-                  game_id: "101"
-                  batch_id: "01"
-                  ticket_id: "999"
-                  pack_id: "0000001"
       responses:
         '200':
           description: Validation result
@@ -60,24 +59,50 @@ paths:
                   summary: Winner
                   value:
                     found: true
-                    ticket_hash: "dbedcc2a...bce5"
+                    ticket_hash: "a9565fa6...0a55"
                     tier: "4"
-                    prize: 0.00
                     claim_status: 0
                     message: null
                 notFound:
                   summary: Not a winner
                   value:
                     found: false
-                    ticket_hash: "f00ba7..."
+                    ticket_hash: "eb0d90f...9939"
                     tier: null
-                    prize: null
                     claim_status: 0
                     message: "not winner"
         '400':
-          description: Validation error (e.g., invalid field length)
+          description: Bad request / validation error (e.g., invalid field lengths/patterns)
+          content:
+            application/json:
+              examples:
+                found:
+                  summary: Field pattern mismatch
+                  value:
+                    timestamp: "2026-01-15T15:32:11.406566800+01:00"
+                    status: 400
+                    error: "Bad Request"
+                    code: "DTO_VALIDATION_ERROR"
+                    message: "Invalid request fields"
+                    details:
+                      field_errors:
+                        - field: "game_id"
+                        - error: "must match \"\\d{1,3}\""
+                    hint: null
+                    correlation_id: "06853092-dbd8-48f1-b3e3-d9aa49a3f941"
         '500':
-          description: Internal server error
+          description: Internal server error (unexpected)
+          content:
+            application/json:
+              examples:
+                unexpected:
+                  summary: Unexpected error
+                  value:
+                    type: "about:blank"
+                    title: "Internal Server Error"
+                    status: 500
+                    detail: "Unexpected exception while computing ticket hash"
+                    instance: "/api/win/check"
 
   /api/claim:
     post:
@@ -94,30 +119,51 @@ paths:
             schema:
               $ref: '#/components/schemas/ClaimRequest'
             examples:
-              increase0to1:
-                summary: Increase from 0 → 1
+              increase0to1winning:
+                summary: Increase from 0 → 1 (winning ticket)
+                value:
+                  customer_id: "22"
+                  game_id: "202"
+                  batch_id: "01"
+                  ticket_id: "000"
+                  desired_claim_value: 1
+                  pack_id: "0000000"
+                  f1: "channel"
+                  f2: "device"
+                  f3: "person"
+                  f4: "external_ref"
+              increase0to1notwinner:
+                summary: Increase from 0 → 1 (non-winning ticket)
                 value:
                   customer_id: "11"
                   game_id: "101"
                   batch_id: "01"
                   ticket_id: "007"
-                  desired_claim_value: 1
                   pack_id: "0000123"
                   f1: "channel"
                   f2: "device"
                   f3: "person"
                   f4: "external_ref"
+                  desired_claim_value: 1
               increase1to2:
                 summary: Increase from 1 → 2
                 value:
-                  customer_id: "11"
-                  game_id: "101"
+                  customer_id: "22"
+                  game_id: "202"
                   batch_id: "01"
-                  ticket_id: "007"
+                  ticket_id: "000"
                   desired_claim_value: 2
+              decrease2to1:
+                summary: Attempted decrease from 2 → 1 (illegal)
+                value:
+                  customer_id: "22"
+                  game_id: "202"
+                  batch_id: "01"
+                  ticket_id: "000"
+                  desired_claim_value: 1
       responses:
         '200':
-          description: Claim update result
+          description: Claim update result (updated or explained no-op)
           content:
             application/json:
               schema:
@@ -128,33 +174,88 @@ paths:
                   value:
                     found: true
                     updated: true
-                    ticket_hash: "dbedcc2a...bce5"
+                    ticket_hash: "a9565fa6...0a55"
                     old_claim_value: 0
                     new_claim_value: 1
                     message: null
-                noDecrease:
-                  summary: Attempt to decrease (e.g., 2 → 1) blocked
+                idempotentNoop:
+                  summary: No-op (desired equals current)
                   value:
                     found: true
                     updated: false
-                    ticket_hash: "dbedcc2a...bce5"
-                    old_claim_value: 2
+                    ticket_hash: "a9565fa6...0a55"
+                    old_claim_value: 1
                     new_claim_value: 1
-                    message: "cannot decrease claim status"
-                notWinner:
-                  summary: Non-existent / not winner
-                  value:
-                    found: false
-                    updated: false
-                    ticket_hash: "f00ba7..."
-                    old_claim_value: 0
-                    new_claim_value: 1
-                    message: "non existent – not winner"
+                    message: null
         '400':
-          description: Validation error (e.g., desired_claim_value outside {1,2})
+          description: Bad request / validation error (e.g., desired_claim_value ∉ {1,2})
+          content:
+            application/json:
+              examples:
+                badDesired:
+                  summary: desired_claim_value outside allowed set
+                  value:
+                    timestamp: "2026-01-15T16:06:12.931819200+01:00"
+                    status: 400
+                    error: "Bad Request"
+                    code: "DTO_VALIDATION_ERROR"
+                    message: "Invalid request fields"
+                    details:
+                      field_errors:
+                        - field: "Desired_claim_value"
+                        - error: "must be less than or equal to 2"
+                    hint: null
+                    correlation_id: "fda0ae17-b621-49ff-9a70-28d66164a104"
+        '404':
+          description: Winner not found (non-existent ticket_hash / not winner) or unknown tenant/game
+          content:
+            application/json:
+              examples:
+                notWinner:
+                  summary: Non-existent or not winner
+                  value:
+                    timestamp: "2026-01-15T16:13:27.479089900+01:00"
+                    status: 404
+                    error: "Not Found"
+                    code: "NOT_WINNER"
+                    message: "not winner"
+                    details:
+                      ticket_hash: "eb0d90f...9939"
+                      field_errors:
+                    hint: null
+                    correlation_id: "d4411412-d29d-48d1-94bb-895f4f552187"
+        '409':
+          description: Conflict (e.g., attempt to decrease 2→1 or illegal transition)
+          content:
+            application/json:
+              examples:
+                decreaseAttempt:
+                  summary: Monotonic rule violation (decrease)
+                  value:
+                    timestamp: "2026-01-15T16:08:37.247087600+01:00"
+                    status: 409
+                    error: "Conflict"
+                    code: "CLAIM_DECREASE_FORBIDDEN"
+                    message: "cannot decrease claim status"
+                    details:
+                      old_claim: 2
+                      ticket_hash: "a9565fa6...0a55"
+                      requested: 1
+                    hint: "Only monotonic transitions allowed: 0→1→2"
+                    correlation_id: "532740b0-a0bb-477e-ab28-faa1fd6c01af"
         '500':
-          description: Internal server error
-
+          description: Internal server error (unexpected)
+          content:
+            application/json:
+              examples:
+                unexpected:
+                  summary: Unexpected error
+                  value:
+                    type: "about:blank"
+                    title: "Internal Server Error"
+                    status: 500
+                    detail: "Unexpected exception while writing audit log"
+                    instance: "/api/claim"
 components:
   schemas:
     CheckRequest:
@@ -222,3 +323,45 @@ components:
         old_claim_value: { type: integer, example: 0 }
         new_claim_value: { type: integer, example: 1 }
         message: { type: string, nullable: true, example: null }
+
+    ErrorResponse:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-01-15T15:32:11.406566800+01:00"
+        status:
+          type: integer
+          example: 400
+        error:
+          type: string
+          example: "Bad Request"
+        code:
+          type: string
+          example: "DTO_VALIDATION_ERROR"
+        message:
+          type: string
+          example: "Invalid request fields"
+        details:
+          type: object
+          properties:
+            field_errors:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                    example: "game_id"
+                  error:
+                    type: string
+                    example: "must match \"\\d{1,3}\""
+        hint:
+          type: string
+          nullable: true
+          example: null
+        correlation_id:
+          type: string
+          format: uuid
+          example: "06853092-dbd8-48f1-b3e3-d9aa49a3f941"

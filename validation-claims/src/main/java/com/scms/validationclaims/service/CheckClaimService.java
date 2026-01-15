@@ -1,3 +1,4 @@
+
 package com.scms.validationclaims.service;
 
 import com.scms.validationclaims.dto.CheckRequest;
@@ -20,7 +21,6 @@ import com.scms.validationclaims.repository.WinnerRepository;
 import lombok.RequiredArgsConstructor;
 import org.bouncycastle.jcajce.provider.digest.Blake2b;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,15 +52,14 @@ public class CheckClaimService {
     public CheckResponse check(CheckRequest req) {
         int alg = gameHashAlg(req.getGame_id());
 
-        String customer = zfillDigits(req.getCustomer_id(), 2);
-        String game     = zfillDigits(req.getGame_id(), 3);
-        String batch    = zfillDigits(req.getBatch_id(), 2);
-        String pack     = zfillDigits(req.getPack_id(), 7);
-        String ticket   = zfillDigits(req.getTicket_id(), 3);
+        // NORMALIZACJA – zawsze zapisz jako zera z lewej
+        String customer = zfillDigits(Optional.ofNullable(req.getCustomer_id()).orElse(""), 2); // <--
+        String game     = zfillDigits(Optional.ofNullable(req.getGame_id()).orElse(""), 3);     // <--
+        String batch    = zfillDigits(Optional.ofNullable(req.getBatch_id()).orElse(""), 2);    // <--
+        String pack     = zfillDigits(Optional.ofNullable(req.getPack_id()).orElse(""), 7);     // <--
+        String ticket   = zfillDigits(Optional.ofNullable(req.getTicket_id()).orElse(""), 3);   // <--
 
-        String serial = hashing.buildSerial(
-                customer, game, batch,
-                pack, ticket);
+        String serial = hashing.buildSerial(customer, game, batch, pack, ticket);
         String th = hashing.hash(alg, serial);
 
         return winnerRepo.findById(th)
@@ -78,17 +77,15 @@ public class CheckClaimService {
     public ClaimResponse claim(ClaimRequest req) {
         int alg = gameHashAlg(req.getGame_id());
 
-        String customer = zfillDigits(req.getCustomer_id(), 2);
-        String game     = zfillDigits(req.getGame_id(), 3);
-        String batch    = zfillDigits(req.getBatch_id(), 2);
-        String pack     = zfillDigits(req.getPack_id(), 7);
-        String ticket   = zfillDigits(req.getTicket_id(), 3);
+        // NORMALIZACJA – identycznie jak w check()
+        String customer = zfillDigits(Optional.ofNullable(req.getCustomer_id()).orElse(""), 2); // <--
+        String game     = zfillDigits(Optional.ofNullable(req.getGame_id()).orElse(""), 3);     // <--
+        String batch    = zfillDigits(Optional.ofNullable(req.getBatch_id()).orElse(""), 2);    // <--
+        String pack     = zfillDigits(Optional.ofNullable(req.getPack_id()).orElse(""), 7);     // <--
+        String ticket   = zfillDigits(Optional.ofNullable(req.getTicket_id()).orElse(""), 3);   // <--
 
-        String serial = hashing.buildSerial(
-                customer, game, batch,
-                pack, ticket);
+        String serial = hashing.buildSerial(customer, game, batch, pack, ticket);
         String th = hashing.hash(alg, serial);
-
 
         Winner w = winnerRepo.findById(th).orElse(null);
         if (w == null) {
@@ -109,7 +106,6 @@ public class CheckClaimService {
             );
         }
 
-
         if (desired < oldClaim) {
             throw new ClaimDecreaseForbiddenException(oldClaim, desired, th);
         }
@@ -121,41 +117,38 @@ public class CheckClaimService {
             winnerRepo.save(w);
         }
 
-        // Append a single audit log row with chained signature
-        String previous = String.valueOf(logRepo.findLatestByTicket(
-                req.getCustomer_id(),
-                req.getGame_id(),
-                req.getBatch_id(),
-                Optional.ofNullable(req.getPack_id()).orElse(""),
-                req.getTicket_id(),
-                PageRequest.of(0, 1)  // take exactly the first record
-        )
+        // Używaj ZNORMALIZOWANYCH kluczy także do odczytu poprzedniego podpisu:
+        String prevSig = logRepo.findLatestByTicket(
+                customer,   // <--
+                game,       // <--
+                batch,      // <--
+                pack,       // <--
+                ticket,     // <--
+                PageRequest.of(0, 1)
+        ).stream().findFirst().orElse("");
 
-        .stream()
-        .findFirst()
-        .orElse(null));
-
-
+        // Zapisuj do loga ZNORMALIZOWANE wartości:
         ClaimLog log = new ClaimLog();
         log.setTxDate(LocalDate.now());
         log.setTxTime(LocalTime.now().withNano(0));
-        log.setTxCustomerId(req.getCustomer_id());
-        log.setTxGameId(req.getGame_id());
-        log.setTxBatchId(req.getBatch_id());
-        log.setTxPackId(Optional.ofNullable(req.getPack_id()).orElse(""));
-        log.setTxTicketId(req.getTicket_id());
+        log.setTxCustomerId(customer);  // <--
+        log.setTxGameId(game);          // <--
+        log.setTxBatchId(batch);        // <--
+        log.setTxPackId(pack);          // <--
+        log.setTxTicketId(ticket);      // <--
         log.setOldClaimValue(oldClaim);
         log.setNewClaimValue(desired);
         log.setForeignRef1(req.getF1());
         log.setForeignRef2(req.getF2());
         log.setForeignRef3(req.getF3());
         log.setForeignRef4(req.getF4());
-        log.setSignature(chainSignature(previous, log));
+        log.setSignature(chainSignature(prevSig, log));
         logRepo.save(log);
 
         return new ClaimResponse(true, updated, th, oldClaim, desired, null);
     }
 
+    /** Zero-fill digits with validation. Accepts empty string as "no value". */
     private static String zfillDigits(String s, int width) {
         String v = (s == null ? "" : s).trim();
         if (!v.matches("\\d*")) throw new IllegalArgumentException("digits only: " + v);
@@ -163,7 +156,7 @@ public class CheckClaimService {
         return "0".repeat(width - v.length()) + v;
     }
 
-        /** Build chained BLAKE2b signature over textual payload + previous signature. */
+    /** Build chained BLAKE2b signature over textual payload + previous signature. */
     private String chainSignature(String prev, ClaimLog e) {
         String payload = Stream.of(
                 e.getTxDate(),
@@ -186,6 +179,5 @@ public class CheckClaimService {
         StringBuilder sb = new StringBuilder(digest.length * 2);
         for (byte b : digest) sb.append(String.format("%02x", b));
         return sb.toString();
-
     }
 }

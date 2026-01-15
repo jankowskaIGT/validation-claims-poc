@@ -58,27 +58,36 @@
           font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
         }
 
-        /* Page grid */
+        /* Page layout using flexbox */
         .grid {
-          display: grid;
-          grid-template-columns: repeat(12, minmax(0, 1fr));
+          display: flex;
+          flex-wrap: wrap;
           gap: 1.25rem;
           padding: 1.5rem;
           max-width: 1200px;
           margin-inline: auto;
         }
+
+        /* Cards: default full width on mobile */
         section.card {
-          grid-column: span 12;
+          flex: 1 1 100%;
           background: var(--panel);
           border: 1px solid rgba(255,255,255,.08);
           border-radius: 14px;
           padding: 1.25rem;
           box-shadow: 0 6px 24px rgba(0,0,0,.12);
         }
+
+        /* On desktop: two cards side by side (approx 50%) */
         @media (min-width: 900px) {
-          section.card       { grid-column: span 4; }
-          section.card.wide  { grid-column: span 8; }
+          section.card {
+            flex: 1 1 48%; /* two cards per row */
+          }
+          section.card.wide {
+            flex: 1 1 100%; /* full width for wide sections */
+          }
         }
+
         section.card h2 {
           margin: 0 0 .75rem 0;
           font-weight: 600;
@@ -101,7 +110,6 @@
           grid-template-columns: 1fr;
           gap: .3rem;
         }
-        /* Make output blocks span full width under the form fields */
         .form-output {
           grid-column: 1 / -1;                     /* spans both columns */
         }
@@ -118,9 +126,8 @@
         }
         input::placeholder { color: var(--muted); }
 
-        /* Button row spans both columns, aligned nicely */
         .actions {
-          grid-column: 1 / -1;                     /* spans both columns */
+          grid-column: 1 / -1;
           display: flex;
           gap: .6rem;
           flex-wrap: wrap;
@@ -146,7 +153,6 @@
         .btn-success { background: var(--success); }
         .btn-danger  { background: var(--danger); }
 
-        /* Readable output blocks (light background, dark text) */
         pre {
           background: #f9fafb;
           color: #111827;
@@ -191,26 +197,11 @@
     <section class="card">
         <h2>Check winner</h2>
         <form id="winForm" class="form-grid">
-            <div class="field">
-                <label>customer_id</label>
-                <input name="customer_id" value="11" placeholder="e.g., 11">
-            </div>
-            <div class="field">
-                <label>game_id</label>
-                <input name="game_id" value="101" placeholder="e.g., 101">
-            </div>
-            <div class="field">
-                <label>batch_id</label>
-                <input name="batch_id" value="01" placeholder="e.g., 01">
-            </div>
-            <div class="field">
-                <label>ticket_id</label>
-                <input name="ticket_id" value="007" placeholder="e.g., 007">
-            </div>
-            <div class="field">
-                <label>pack_id</label>
-                <input name="pack_id" value="0000123" placeholder="optional (max 7 digits)">
-            </div>
+            <div class="field"><label>customer_id</label><input name="customer_id" value="11" placeholder="e.g., 11" inputmode="numeric" pattern="\d*"></div>
+            <div class="field"><label>game_id</label><input name="game_id" value="101" placeholder="e.g., 101" inputmode="numeric" pattern="\d*"></div>
+            <div class="field"><label>batch_id</label><input name="batch_id" value="01" placeholder="e.g., 01" inputmode="numeric" pattern="\d*"></div>
+            <div class="field"><label>ticket_id</label><input name="ticket_id" value="007" placeholder="e.g., 007" inputmode="numeric" pattern="\d*"></div>
+            <div class="field"><label>pack_id</label><input name="pack_id" value="0000123" placeholder="optional (max 7 digits)" inputmode="numeric" pattern="\d*"></div>
 
             <div class="actions">
                 <button type="submit" class="btn-success">Check</button>
@@ -225,17 +216,13 @@
     <section class="card">
         <h2>Update claim status</h2>
         <form id="claimForm" class="form-grid">
-            <div class="field"><label>customer_id</label><input name="customer_id" value="11"></div>
-            <div class="field"><label>game_id</label><input name="game_id" value="101"></div>
-            <div class="field"><label>batch_id</label><input name="batch_id" value="01"></div>
-            <div class="field"><label>ticket_id</label><input name="ticket_id" value="007"></div>
-            <div class="field"><label>pack_id</label><input name="pack_id" value="0000123"></div>
-            <div class="field">
-                <label>desired_claim_value</label>
-                <select name="desired_claim_value">
-                    <option>1</option>
-                    <option>2</option>
-                </select>
+            <div class="field"><label>customer_id</label><input name="customer_id" value="11" inputmode="numeric" pattern="\d*"></div>
+            <div class="field"><label>game_id</label><input name="game_id" value="101" inputmode="numeric" pattern="\d*"></div>
+            <div class="field"><label>batch_id</label><input name="batch_id" value="01" inputmode="numeric" pattern="\d*"></div>
+            <div class="field"><label>ticket_id</label><input name="ticket_id" value="007" inputmode="numeric" pattern="\d*"></div>
+            <div class="field"><label>pack_id</label><input name="pack_id" value="0000123" inputmode="numeric" pattern="\d*"></div>
+            <div class="field"><label>desired_claim_value</label>
+                <select name="desired_claim_value"><option>1</option><option>2</option></select>
             </div>
             <div class="field"><label>f1</label><input name="f1" value="channel"></div>
             <div class="field"><label>f2</label><input name="f2" value="device"></div>
@@ -251,7 +238,7 @@
         </form>
     </section>
 
-    <!-- H2 data viewer via helper endpoints -->
+    <!-- H2 data viewer -->
     <section class="card wide">
         <h2>H2 data browser</h2>
         <div class="actions">
@@ -262,49 +249,14 @@
         <pre id="dataOut" class="mono">{ data appears here }</pre>
     </section>
 
-    <!-- API Documentation -->
-    <section class="card">
-        <h2>API Documentation</h2>
-
-        <!-- Variant 1: button to built-in Swagger UI -->
-        /swagger-ui/index.html
-        Open API documentation
-        </a>
-
-        <p class="helper-note">
-            If the page doesn’t open, ensure the app is running and the dependency
-            <span class="code-pill">springdoc-openapi-starter-webmvc-ui</span>
-            is present in <span class="code-pill">pom.xml</span>.
-        </p>
-
-        <!-- Variant 2 (optional): embed Swagger UI on THIS page.
-             To use: uncomment the three lines below (stylesheet, container div, script),
-             and make sure /v3/api-docs returns your OpenAPI JSON.
-
-        https://unpkg.com/swagger-ui-dist@5/swagger-ui.css
-        <div id="swagger-ui-container" style="margin-top:1rem"></div>
-        https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js</script>
-        <script>
-          window.addEventListener('load', function() {
-            SwaggerUIBundle({
-              url: '/v3/api-docs',
-              dom_id: '#swagger-ui-container',
-              presets: [SwaggerUIBundle.presets.apis],
-              layout: 'BaseLayout'
-            });
-          });
-        </script>
-        -->
-    </section>
-
 </main>
 
 <footer>
-    PoC: functionality > performance • Win + Claim • DB-agnostic (JPA/Hibernate) • pack activation out of scope
+    PoC: functionality &gt; performance • Win + Claim • DB-agnostic (JPA/Hibernate) • pack activation out of scope
 </footer>
 
-<!-- Logic -->
 <script>
+    /** ---- Utilities ---- **/
     async function postJson(url, data) {
       const res = await fetch(url, {
         method: 'POST',
@@ -323,52 +275,124 @@
     }
     const formToObj = (form) => Object.fromEntries(new FormData(form).entries());
 
-    // Win check
-    document.getElementById('winForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const data = formToObj(e.target);
-      const out = document.getElementById('winOut');
-      const resp = await postJson('/api/win/check', data);
-      out.textContent = typeof resp.body === 'string'
-        ? resp.body
-        : JSON.stringify(resp.body, null, 2);
-    });
+    /** ---- Zero-fill helpers (frontend mirror of backend zfillDigits) ---- **/
+    function padLeftDigits(value, length) {
+      const v = (value ?? '').toString().replace(/\D/g, ''); // keep only digits
+      // pad and hard-truncate to the target length (prevents overflow)
+      return v.padStart(length, '0').slice(-length);
+    }
 
-    // Claim
-    document.getElementById('claimForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const data = formToObj(e.target);
-      if ('desired_claim_value' in data) {
-        data.desired_claim_value = parseInt(data.desired_claim_value, 10);
+    const padConfig = {
+      customer_id: 2,
+      game_id: 3,
+      batch_id: 2,
+      ticket_id: 3,
+      pack_id: 7
+    };
+
+    /** Add listeners to ALL inputs across both forms */
+    function attachPadListeners() {
+      Object.entries(padConfig).forEach(([name, len]) => {
+        document.querySelectorAll(`input[name="${name}"]`).forEach((input) => {
+          const handler = () => {
+            if (input.value.trim() !== '') {
+              input.value = padLeftDigits(input.value, len);
+            }
+          };
+          input.addEventListener('blur', handler);
+          input.addEventListener('change', handler);
+          // If you want live formatting while typing, uncomment:
+          // input.addEventListener('input', handler);
+        });
+      });
+    }
+
+    /** Normalize data object prior to sending (last line of defense) */
+    function normalizeFormDataObject(data) {
+      for (const [name, len] of Object.entries(padConfig)) {
+        if (name in data && data[name] != null && String(data[name]).trim() !== '') {
+          data[name] = padLeftDigits(String(data[name]), len);
+        }
       }
-      const out = document.getElementById('claimOut');
-      const resp = await postJson('/api/claim', data);
-      out.textContent = typeof resp.body === 'string'
-        ? resp.body
-        : JSON.stringify(resp.body, null, 2);
-    });
+      return data;
+    }
 
-    // H2 data via API
-    document.getElementById('loadGames').addEventListener('click', async () => {
-      const out = document.getElementById('dataOut');
-      const resp = await getJson('/ui/games');
-      out.textContent = typeof resp.body === 'string'
-        ? resp.body
-        : JSON.stringify(resp.body, null, 2);
-    });
-    document.getElementById('loadWinners').addEventListener('click', async () => {
-      const out = document.getElementById('dataOut');
-      const resp = await getJson('/ui/winners?limit=50');
-      out.textContent = typeof resp.body === 'string'
-        ? resp.body
-        : JSON.stringify(resp.body, null, 2);
-    });
-    document.getElementById('loadClaimlog').addEventListener('click', async () => {
-      const out = document.getElementById('dataOut');
-      const resp = await getJson('/ui/claimlog?limit=50');
-      out.textContent = typeof resp.body === 'string'
-        ? resp.body
-        : JSON.stringify(resp.body, null, 2);
+    /** Normalize current DOM input values (so user sees 001/etc.) */
+    function normalizeFormInputsInDom(form) {
+      Object.entries(padConfig).forEach(([name, len]) => {
+        form.querySelectorAll(`input[name="${name}"]`).forEach((input) => {
+          if (input.value.trim() !== '') {
+            input.value = padLeftDigits(input.value, len);
+          }
+        });
+      });
+    }
+
+    /** ---- Init after DOM ready ---- **/
+    document.addEventListener('DOMContentLoaded', () => {
+      attachPadListeners();
+
+      // --- WIN FORM ---
+      document.getElementById('winForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        normalizeFormInputsInDom(e.target); // update visible inputs
+        const data = normalizeFormDataObject(formToObj(e.target)); // normalize payload
+
+        const out = document.getElementById('winOut');
+        const resp = await postJson('/api/win/check', data);
+        out.textContent = typeof resp.body === 'string'
+          ? resp.body
+          : JSON.stringify(resp.body, null, 2);
+      });
+
+      // --- CLAIM FORM ---
+      document.getElementById('claimForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        normalizeFormInputsInDom(e.target);
+        const data = normalizeFormDataObject(formToObj(e.target));
+
+        if ('desired_claim_value' in data) {
+          data.desired_claim_value = parseInt(data.desired_claim_value, 10);
+        }
+        const out = document.getElementById('claimOut');
+        const resp = await postJson('/api/claim', data);
+        out.textContent = typeof resp.body === 'string'
+          ? resp.body
+          : JSON.stringify(resp.body, null, 2);
+      });
+
+      // Optional: clear outputs on reset for nicer UX
+      document.querySelectorAll('form').forEach(form => {
+        form.addEventListener('reset', () => {
+          setTimeout(() => {
+            const pre = form.querySelector('pre');
+            if (pre) pre.textContent = '{ response appears here }';
+          });
+        });
+      });
+
+      // --- H2 browser buttons ---
+      document.getElementById('loadGames').addEventListener('click', async () => {
+        const out = document.getElementById('dataOut');
+        const resp = await getJson('/ui/games');
+        out.textContent = typeof resp.body === 'string'
+          ? resp.body
+          : JSON.stringify(resp.body, null, 2);
+      });
+      document.getElementById('loadWinners').addEventListener('click', async () => {
+        const out = document.getElementById('dataOut');
+        const resp = await getJson('/ui/winners?limit=50');
+        out.textContent = typeof resp.body === 'string'
+          ? resp.body
+          : JSON.stringify(resp.body, null, 2);
+      });
+      document.getElementById('loadClaimlog').addEventListener('click', async () => {
+        const out = document.getElementById('dataOut');
+        const resp = await getJson('/ui/claimlog?limit=50');
+        out.textContent = typeof resp.body === 'string'
+          ? resp.body
+          : JSON.stringify(resp.body, null, 2);
+      });
     });
 </script>
 </body>

@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.Query;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.repository.query.Param;
+
 import java.util.List;
 
 
@@ -22,6 +24,12 @@ public interface ClaimLogRepository extends JpaRepository<ClaimLog, Integer> {
           AND c.txTicketId   = :ticketId
         ORDER BY c.idclaimlog DESC
     """)
-    List<ClaimLog> findLatestByTicket(String customerId, String gameId, String batchId, String packId, String ticketId, Pageable pageable);
+    List<String> findLatestByTicket(
+            @Param("customerId") String customerId,
+            @Param("gameId") String gameId,
+            @Param("batchId") String batchId,
+            @Param("packId") String packId,
+            @Param("ticketId") String ticketId,
+            Pageable pageable);
 
 }
