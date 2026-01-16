@@ -11,11 +11,9 @@ import com.scms.validationclaims.exception.ClaimDecreaseForbiddenException;
 import com.scms.validationclaims.exception.NotWinnerException;
 
 import com.scms.validationclaims.model.ClaimLog;
-import com.scms.validationclaims.model.Game;
 import com.scms.validationclaims.model.Winner;
 
 import com.scms.validationclaims.repository.ClaimLogRepository;
-import com.scms.validationclaims.repository.GameRepository;
 import com.scms.validationclaims.repository.WinnerRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -35,32 +33,29 @@ import java.util.stream.Stream;
 @RequiredArgsConstructor
 public class CheckClaimService {
 
-    private final GameRepository gameRepo;
     private final WinnerRepository winnerRepo;
     private final ClaimLogRepository logRepo;
     private final HashingService hashing;
 
-    /** Resolve per-game hashing algorithm (1=BLAKE2b, 2=SHA-256; default 1). */
-    private int gameHashAlg(String gameId) {
-        Optional<Game> g = gameRepo.findByGameId(gameId);
-        return g.map(x -> Optional.ofNullable(x.getHashAlgorithm()).orElse(1))
-                .orElse(1);
-    }
-
     /** Read-only check: compute hash, look up winner, return metadata. */
     @Transactional(readOnly = true)
     public CheckResponse check(CheckRequest req) {
-        int alg = gameHashAlg(req.getGame_id());
+        String customer = zfillDigits(Optional.ofNullable(req.getCustomer_id()).orElse(""), 2);
+        String game     = zfillDigits(Optional.ofNullable(req.getGame_id()).orElse(""), 3);
+        String batch    = zfillDigits(Optional.ofNullable(req.getBatch_id()).orElse(""), 2);
+        String pack     = zfillDigits(Optional.ofNullable(req.getPack_id()).orElse(""), 7);
+        String ticket   = zfillDigits(Optional.ofNullable(req.getTicket_id()).orElse(""), 3);
 
-        // NORMALIZACJA – zawsze zapisz jako zera z lewej
-        String customer = zfillDigits(Optional.ofNullable(req.getCustomer_id()).orElse(""), 2); // <--
-        String game     = zfillDigits(Optional.ofNullable(req.getGame_id()).orElse(""), 3);     // <--
-        String batch    = zfillDigits(Optional.ofNullable(req.getBatch_id()).orElse(""), 2);    // <--
-        String pack     = zfillDigits(Optional.ofNullable(req.getPack_id()).orElse(""), 7);     // <--
-        String ticket   = zfillDigits(Optional.ofNullable(req.getTicket_id()).orElse(""), 3);   // <--
-
-        String serial = hashing.buildSerial(customer, game, batch, pack, ticket);
-        String th = hashing.hash(alg, serial);
+        final String th;
+        try {
+            th = hashing.computeTicketHash(customer, game, batch, pack, ticket);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessValidationException(
+                    "GAME_UNSUPPORTED",
+                    e.getMessage(),
+                    java.util.Map.of("gameId", game)
+            );
+        }
 
         return winnerRepo.findById(th)
                 .map(w -> new CheckResponse(
@@ -75,21 +70,25 @@ public class CheckClaimService {
     /** Claim: update claim status (no decrease), then write one audit row with chained signature. */
     @Transactional
     public ClaimResponse claim(ClaimRequest req) {
-        int alg = gameHashAlg(req.getGame_id());
+        String customer = zfillDigits(Optional.ofNullable(req.getCustomer_id()).orElse(""), 2);
+        String game     = zfillDigits(Optional.ofNullable(req.getGame_id()).orElse(""), 3);
+        String batch    = zfillDigits(Optional.ofNullable(req.getBatch_id()).orElse(""), 2);
+        String pack     = zfillDigits(Optional.ofNullable(req.getPack_id()).orElse(""), 7);
+        String ticket   = zfillDigits(Optional.ofNullable(req.getTicket_id()).orElse(""), 3);
 
-        // NORMALIZACJA – identycznie jak w check()
-        String customer = zfillDigits(Optional.ofNullable(req.getCustomer_id()).orElse(""), 2); // <--
-        String game     = zfillDigits(Optional.ofNullable(req.getGame_id()).orElse(""), 3);     // <--
-        String batch    = zfillDigits(Optional.ofNullable(req.getBatch_id()).orElse(""), 2);    // <--
-        String pack     = zfillDigits(Optional.ofNullable(req.getPack_id()).orElse(""), 7);     // <--
-        String ticket   = zfillDigits(Optional.ofNullable(req.getTicket_id()).orElse(""), 3);   // <--
-
-        String serial = hashing.buildSerial(customer, game, batch, pack, ticket);
-        String th = hashing.hash(alg, serial);
+        final String th;
+        try {
+            th = hashing.computeTicketHash(customer, game, batch, pack, ticket);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessValidationException(
+                    "GAME_UNSUPPORTED",
+                    e.getMessage(),
+                    java.util.Map.of("gameId", game)
+            );
+        }
 
         Winner w = winnerRepo.findById(th).orElse(null);
         if (w == null) {
-            // -> 404 Not Found (GlobalExceptionHandler)
             throw new NotWinnerException(th);
         }
 
@@ -117,25 +116,23 @@ public class CheckClaimService {
             winnerRepo.save(w);
         }
 
-        // Używaj ZNORMALIZOWANYCH kluczy także do odczytu poprzedniego podpisu:
         String prevSig = logRepo.findLatestByTicket(
-                customer,   // <--
-                game,       // <--
-                batch,      // <--
-                pack,       // <--
-                ticket,     // <--
+                customer,
+                game,
+                batch,
+                pack,
+                ticket,
                 PageRequest.of(0, 1)
         ).stream().findFirst().orElse("");
 
-        // Zapisuj do loga ZNORMALIZOWANE wartości:
         ClaimLog log = new ClaimLog();
         log.setTxDate(LocalDate.now());
         log.setTxTime(LocalTime.now().withNano(0));
-        log.setTxCustomerId(customer);  // <--
-        log.setTxGameId(game);          // <--
-        log.setTxBatchId(batch);        // <--
-        log.setTxPackId(pack);          // <--
-        log.setTxTicketId(ticket);      // <--
+        log.setTxCustomerId(customer);
+        log.setTxGameId(game);
+        log.setTxBatchId(batch);
+        log.setTxPackId(pack);
+        log.setTxTicketId(ticket);
         log.setOldClaimValue(oldClaim);
         log.setNewClaimValue(desired);
         log.setForeignRef1(req.getF1());
@@ -156,7 +153,6 @@ public class CheckClaimService {
         return "0".repeat(width - v.length()) + v;
     }
 
-    /** Build chained BLAKE2b signature over textual payload + previous signature. */
     private String chainSignature(String prev, ClaimLog e) {
         String payload = Stream.of(
                 e.getTxDate(),
